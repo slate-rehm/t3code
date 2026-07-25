@@ -46,6 +46,7 @@ import {
   resolveExternalWebLinkHost,
   showExternalLinkContextMenu,
 } from "./chat/externalLinkContextMenu";
+import { MermaidDiagram } from "./MermaidDiagram";
 import { hasSpecificPierreIconForFileName, syntheticFileNameForLanguageId } from "../pierre-icons";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import { Button } from "./ui/button";
@@ -1504,6 +1505,18 @@ function ChatMarkdown({
 
         const language = extractFenceLanguage(codeBlock.className);
         const fenceTitle = extractFenceTitle(extractPreCodeMeta(node));
+        if (language === "mermaid" && !isStreaming) {
+          return (
+            <MarkdownCodeBlock
+              code={codeBlock.code}
+              language={language}
+              fenceTitle={fenceTitle}
+              theme={resolvedTheme}
+            >
+              <MermaidDiagram source={codeBlock.code} theme={resolvedTheme} />
+            </MarkdownCodeBlock>
+          );
+        }
         return (
           <MarkdownCodeBlock
             code={codeBlock.code}
