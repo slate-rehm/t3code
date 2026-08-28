@@ -10,19 +10,17 @@ import { selectProjectGroupingSettings } from "~/logicalProject";
 import {
   buildSidebarProjectPickerEntries,
   buildSidebarProjectSnapshots,
+  type SidebarProjectGroupMember,
 } from "~/sidebarProjectGrouping";
 import { useProjects, useThreadShells } from "~/state/entities";
 import { useEnvironments, usePrimaryEnvironmentId } from "~/state/environments";
 import { sortLogicalProjectsForSidebar } from "../Sidebar.logic";
 import {
-  Menu,
-  MenuItem,
-  MenuPopup,
-  MenuRadioGroup,
-  MenuRadioItem,
-  MenuSeparator,
-  MenuTrigger,
-} from "../ui/menu";
+  PROJECT_PICKER_ACTION_VALUE,
+  ProjectPicker,
+  type ProjectPickerOption,
+} from "../ProjectPicker";
+import { ComboboxTrigger } from "../ui/combobox";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
 interface DraftHeroHeadlineProps {
@@ -80,9 +78,18 @@ export function DraftHeroHeadline({
       }),
     [activeProjectRef, projectGroups],
   );
-  const projectEntryByKey = useMemo(
-    () => new Map(projectPickerEntries.map((entry) => [entry.group.projectKey, entry] as const)),
+  const projectPickerOptions = useMemo<readonly ProjectPickerOption<SidebarProjectGroupMember>[]>(
+    () =>
+      projectPickerEntries.map(({ group, targetProject }) => ({
+        value: group.projectKey,
+        label: group.displayName,
+        data: targetProject,
+      })),
     [projectPickerEntries],
+  );
+  const projectOptionByKey = useMemo(
+    () => new Map(projectPickerOptions.map((option) => [option.value, option] as const)),
+    [projectPickerOptions],
   );
   const activeProjectGroup =
     activeProjectRef === null
@@ -99,63 +106,61 @@ export function DraftHeroHeadline({
   const shouldShowProjectMenu = canChooseProject;
 
   const projectSelector = shouldShowProjectMenu ? (
-    <Menu>
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <MenuTrigger
-              aria-label={hasResolvedProject ? "Change project" : "Choose a project"}
-              className="pointer-events-auto inline-block max-w-64 truncate border-foreground/60 border-b border-dotted align-baseline text-foreground transition-colors hover:border-foreground/80 focus-visible:rounded-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
-            />
-          }
-        >
-          {activeProjectDisplayName ?? "Choose a project"}
-        </TooltipTrigger>
-        {activeProjectDisplayName ? (
+    <ProjectPicker
+      action={{
+        value: PROJECT_PICKER_ACTION_VALUE,
+        label: "New project",
+        icon: <FolderPlusIcon />,
+        onSelect: openAddProject,
+      }}
+      emptyMessage="No matching projects."
+      onValueChange={(value) => {
+        const option = projectOptionByKey.get(value);
+        if (!option || value === activeProjectKey) {
+          return;
+        }
+        const project = option.data;
+        // Changing the repo of a draft moves the typed content along:
+        // the user started writing in the wrong project, not a new task.
+        void handleNewThread(scopeProjectRef(project.environmentId, project.id), {
+          replace: true,
+          carryComposerContent: true,
+        });
+      }}
+      options={projectPickerOptions}
+      popupAlign="center"
+      popupClassName="max-h-80 min-w-40! w-max max-w-[min(16rem,var(--available-width))]"
+      renderOption={(option) => (
+        <Tooltip>
+          <TooltipTrigger render={<span className="block min-w-0 truncate" />}>
+            {option.label}
+          </TooltipTrigger>
           <TooltipPopup side="top" className="max-w-80">
-            {activeProjectDisplayName}
+            {option.label}
           </TooltipPopup>
-        ) : null}
-      </Tooltip>
-      <MenuPopup align="center" className="max-h-80 min-w-40! w-max max-w-64 overflow-y-auto">
-        <MenuRadioGroup
-          value={activeProjectKey}
-          onValueChange={(value) => {
-            const entry = projectEntryByKey.get(value as string);
-            if (!entry || value === activeProjectKey) {
-              return;
+        </Tooltip>
+      )}
+      trigger={
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <ComboboxTrigger
+                aria-label={hasResolvedProject ? "Change project" : "Choose a project"}
+                className="pointer-events-auto inline-block max-w-64 truncate border-foreground/60 border-b border-dotted align-baseline text-foreground transition-colors hover:border-foreground/80 focus-visible:rounded-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+              />
             }
-            const project = entry.targetProject;
-            // Changing the repo of a draft moves the typed content along:
-            // the user started writing in the wrong project, not a new task.
-            void handleNewThread(scopeProjectRef(project.environmentId, project.id), {
-              replace: true,
-              carryComposerContent: true,
-            });
-          }}
-        >
-          {projectPickerEntries.map(({ group }) => {
-            return (
-              <MenuRadioItem key={group.projectKey} value={group.projectKey} closeOnClick>
-                <Tooltip>
-                  <TooltipTrigger render={<span className="block min-w-0 truncate" />}>
-                    {group.displayName}
-                  </TooltipTrigger>
-                  <TooltipPopup side="top" className="max-w-80">
-                    {group.displayName}
-                  </TooltipPopup>
-                </Tooltip>
-              </MenuRadioItem>
-            );
-          })}
-        </MenuRadioGroup>
-        <MenuSeparator />
-        <MenuItem onClick={openAddProject}>
-          <FolderPlusIcon />
-          New project
-        </MenuItem>
-      </MenuPopup>
-    </Menu>
+          >
+            {activeProjectDisplayName ?? "Choose a project"}
+          </TooltipTrigger>
+          {activeProjectDisplayName ? (
+            <TooltipPopup side="top" className="max-w-80">
+              {activeProjectDisplayName}
+            </TooltipPopup>
+          ) : null}
+        </Tooltip>
+      }
+      value={activeProjectKey}
+    />
   ) : (
     <button
       type="button"
